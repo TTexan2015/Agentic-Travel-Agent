@@ -1,0 +1,1 @@
+This AI travel planner creates complete itineraries with flights, hotels, and attractions based on your destination, dates, and group size. Just launch the app, enter details, or press Enter to see a sample.
