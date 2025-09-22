@@ -20,7 +20,7 @@ class SemanticKernelDemo
         string apiKey = "xxxxxxxYOUR AZURE OPENAI SERVICE_API_KEY GOES HERE";
         if (string.IsNullOrEmpty(apiKey))
         {
-            throw new InvalidOperationException("The Azure OpenAI API key is not set in the environment variables.");
+            throw new InvalidOperationException("The Azure OpenAI API key is not set");
         }
 
         // Create the kernel
@@ -90,4 +90,5 @@ class SemanticKernelDemo
         Console.WriteLine("\nPress any key to close this window...");
         Console.ReadKey();
     }
+
 }
