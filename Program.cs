@@ -31,64 +31,135 @@ class SemanticKernelDemo
             apiKey: apiKey
         );
         var kernel = builder.Build();
-        /////////////////
-
+        
         // Define the agent prompts with input placeholders
-        var TravelReporterPrompt = "You are a helpful AI assistant who finds discounted travel deals: {{$input}}. Check known travel sites and Keep your output concise.";
-        var TravelEditorPrompt = "You are a helpful AI assistant that review and refines the the output. Your task is to produce a polished final draft based on the text: {{$input}}. If this is the final draft, include the message 'TERMINATE' at the end.";
+        //var TravelReporterPrompt = "You are a helpful AI assistant who finds discounted travel deals: {{$input}}. Check known travel sites and Keep your output concise.For hotels, provide addresses, contacts and average listed prices. For flights, name the primary airlines and average fare. For destination attraction, list their addresses, contacts and hours";
+        //var TravelEditorPrompt = "You are a helpful AI assistant that review and refines the the output. Your task is to produce a polished final draft based on the text: {{$input}}. If this is the final draft, include the message 'TERMINATE' at the end.";
+        var TravelReporterPrompt =
+@"You are a helpful AI assistant who finds discounted travel deals.
+Use the conversation history to keep context and avoid asking for details already provided.
+
+History:
+{{$history}}
+
+Task:
+{{$input}}
+
+Rules:
+- Keep output concise.
+- For hotels: include addresses, contacts, average listed prices.
+- For flights: include primary airlines and average fare.
+- For attractions: include addresses, contacts, and hours.";
+
+        var TravelEditorPrompt =
+@"You are a helpful AI assistant that reviews and refines the output.
+Use the conversation history to keep context consistent.
+
+History:
+{{$history}}
+
+Draft to refine:
+{{$input}}
+
+Produce a polished final draft. If the draft is final, include the message 'TERMINATE' at the end.";
+
+
+        // Running conversation history across user turns
+        var runningHistory = "";
 
         // Define the task (interactive)
-        Console.Write("Enter a task for the agent (press Enter to use a sample like: Gimme vacation idea for Hawaii for a week for 4 people including 2 children): ");
-        var userInput = Console.ReadLine();
-        var task = string.IsNullOrWhiteSpace(userInput)
-            ? "Gimme vacation idea for Hawaii for a week for 4 people including 2 children"
-            : userInput.Trim();
-
-        // Create functions using CreateFunctionFromPrompt
-        var TravelReporterFunction = kernel.CreateFunctionFromPrompt(TravelReporterPrompt);
-        var TravelEditorFunction = kernel.CreateFunctionFromPrompt(TravelEditorPrompt);
-
-        // Prepare the arguments
-        var arguments = new KernelArguments();
-        arguments["input"] = task;
-
-        // Initial article draft by Travel Reporter
-        var articleDraft = (await kernel.InvokeAsync(TravelReporterFunction, arguments)).ToString();
-        Console.WriteLine($"\nInitial TravelReporter Output:\n{articleDraft}");
-
-        // Iterative back and forth between Travel Reporter and Travel Editor
-        int maxIterations = 5;
-        for (int i = 0; i < maxIterations; i++)
+        while (true)
         {
-            // Pass the draft to the Travel Editor for rewriting
-            arguments["input"] = articleDraft;
-            var editorResult = (await kernel.InvokeAsync(TravelEditorFunction, arguments)).ToString();
-            Console.WriteLine("==================");
-            Console.WriteLine($"\nTravelEditor Rewritten Article (Iteration {i + 1}):\n{editorResult}");
-            Console.WriteLine("==================");
+            Console.Write("Type 'exit' to quit, 'clear' to clear screen: ");
+            Console.Write("Enter a task for the agent (press Enter to use a sample like: Gimme vacation idea for Hawaii for a week for 4 people including 2 children): ");
 
-            // Check for TERMINATE event
-            if (editorResult.Contains("TERMINATE"))
-            {
-                Console.WriteLine("TERMINATE event detected. Ending iterations.");
+            var userInput = Console.ReadLine();
+            if (string.Equals(userInput, "exit", StringComparison.OrdinalIgnoreCase))
                 break;
+
+            if (string.Equals(userInput, "clear", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(userInput, "cls", StringComparison.OrdinalIgnoreCase))
+            {
+                Console.Clear();
+                try
+                {
+                    Console.SetBufferSize(Console.WindowWidth, Console.WindowHeight);
+                }
+                catch
+                {
+                    //ignore for now
+                }
+                //clears the console buffer.
+                Console.Write("\x1b[3J\x1b[H\x1b[2J");
+                continue;
             }
 
-            // Pass the edited article back to the Travel Reporter for further refinement
-            arguments["input"] = editorResult;
-            var reporterResult = (await kernel.InvokeAsync(TravelReporterFunction, arguments)).ToString();
-            Console.WriteLine($"\nTravelReporter Refined Article (Iteration {i + 1}):\n{reporterResult}");
-            Console.WriteLine("==================");
+            var task = string.IsNullOrWhiteSpace(userInput)
+                ? "Gimme vacation idea for Hawaii for a week for 4 people including 2 children"
+                : userInput.Trim();
 
-            // Update the article draft for the next iteration
-            articleDraft = reporterResult;
+            // Create functions using CreateFunctionFromPrompt
+            var TravelReporterFunction = kernel.CreateFunctionFromPrompt(TravelReporterPrompt);
+            var TravelEditorFunction = kernel.CreateFunctionFromPrompt(TravelEditorPrompt);
+
+            // Prepare the arguments
+            var arguments = new KernelArguments()
+            {
+                ["history"] = runningHistory
+            };
+
+            // Initial article draft by Travel Reporter
+            arguments["input"] = task;
+            var articleDraft = (await kernel.InvokeAsync(TravelReporterFunction, arguments)).ToString();
+            Console.WriteLine($"\nInitial TravelReporter Output:\n{articleDraft}");
+
+            // Iterative back and forth between Travel Reporter and Travel Editor
+            int maxIterations = 5;
+            for (int i = 0; i < maxIterations; i++)
+            {
+                // Pass the draft to the Travel Editor for rewriting
+                arguments["input"] = articleDraft;
+                var editorResult = (await kernel.InvokeAsync(TravelEditorFunction, arguments)).ToString();
+                Console.WriteLine("==================");
+                Console.WriteLine($"\nTravelEditor Rewritten Article (Iteration {i + 1}):\n{editorResult}");
+                Console.WriteLine("==================");
+
+                // Check for TERMINATE event
+                if (editorResult.Contains("TERMINATE"))
+                {
+                    Console.WriteLine("TERMINATE event detected. Ending iterations.");
+                    break;
+                }
+
+                // Pass the edited article back to the Travel Reporter for further refinement
+                arguments["input"] = editorResult;
+                var reporterResult = (await kernel.InvokeAsync(TravelReporterFunction, arguments)).ToString();
+                Console.WriteLine($"\nTravelReporter Refined Article (Iteration {i + 1}):\n{reporterResult}");
+                Console.WriteLine("==================");
+
+                // Update the article draft for the next iteration
+                articleDraft = reporterResult;
+            }
+            Console.WriteLine("========FINAL==========");
+            Console.WriteLine($"\nFinalized Article:\n{articleDraft}");
+            Console.WriteLine("\nTask completed. TERMINATE");
+
+            //Console.WriteLine("\nPress any key to close this window...");
+            //Console.ReadKey();
+
+            // Clean and append this turn into history
+            var finalForHistory = articleDraft.Replace("TERMINATE", "").Trim();
+            runningHistory +=
+                            $@"User: {task}
+                            Assistant: {finalForHistory}
+                            ";
+
+            // Simple guard to keep context small
+            if (runningHistory.Length > 8000)
+            {
+                runningHistory = runningHistory[^8000..];
+            }
+
         }
-        Console.WriteLine("========FINAL==========");
-        Console.WriteLine($"\nFinalized Article:\n{articleDraft}");
-        Console.WriteLine("\nTask completed. TERMINATE");
-
-        Console.WriteLine("\nPress any key to close this window...");
-        Console.ReadKey();
     }
-
 }
